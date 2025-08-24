@@ -1,10 +1,8 @@
 import unittest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 from tools.llm_api import create_llm_client, query_llm, load_environment
 import os
-import google.generativeai as genai
 import io
-import sys
 
 def is_llm_configured():
     """Check if LLM is configured by trying to connect to the server"""
@@ -105,17 +103,20 @@ class TestLLMAPI(unittest.TestCase):
         self.mock_anthropic_response.content = [self.mock_anthropic_content]
         self.mock_anthropic_client.messages.create.return_value = self.mock_anthropic_response
         
-        # Set up Gemini-style response - Updated for Chat Session
-        self.mock_gemini_chat_session = MagicMock() # Mock for the chat session
+        # Set up Gemini-style response - Updated for new genai.Client API
+        self.mock_gemini_chat_session = MagicMock()
         self.mock_gemini_response = MagicMock()
         self.mock_gemini_response.text = "Test Gemini response"
-        self.mock_gemini_chat_session.send_message.return_value = self.mock_gemini_response # Mock send_message
+        self.mock_gemini_chat_session.send_message.return_value = self.mock_gemini_response
         
-        self.mock_gemini_model = MagicMock() # Mock for the GenerativeModel
-        self.mock_gemini_model.start_chat.return_value = self.mock_gemini_chat_session # Mock start_chat
+        self.mock_gemini_client = MagicMock()
+        self.mock_gemini_client.chats.create.return_value = self.mock_gemini_chat_session
         
-        self.mock_gemini_client = MagicMock() # Mock for the genai module itself
-        self.mock_gemini_client.GenerativeModel.return_value = self.mock_gemini_model
+        # Set up file upload mock for image testing
+        self.mock_gemini_file = MagicMock()
+        self.mock_gemini_file.uri = "test-file-uri"
+        self.mock_gemini_file.mime_type = "image/png"
+        self.mock_gemini_client.files.upload.return_value = self.mock_gemini_file
         
         # Set up SiliconFlow-style response
         self.mock_siliconflow_response = MagicMock()
@@ -205,11 +206,12 @@ class TestLLMAPI(unittest.TestCase):
         self.assertEqual(client, self.mock_anthropic_client)
 
     @unittest.skipIf(skip_llm_tests, skip_message)
-    @patch('tools.llm_api.genai')
-    def test_create_gemini_client(self, mock_genai):
+    @patch('tools.llm_api.genai.Client')
+    def test_create_gemini_client(self, mock_genai_client):
+        mock_genai_client.return_value = self.mock_gemini_client
         client = create_llm_client("gemini")
-        mock_genai.configure.assert_called_once_with(api_key='test-google-key')
-        self.assertEqual(client, mock_genai)
+        mock_genai_client.assert_called_once_with(api_key='test-google-key')
+        self.assertEqual(client, self.mock_gemini_client)
 
     @unittest.skipIf(skip_llm_tests, skip_message)
     @patch('tools.llm_api.OpenAI')
@@ -292,15 +294,40 @@ class TestLLMAPI(unittest.TestCase):
     @unittest.skipIf(skip_llm_tests, skip_message)
     @patch('tools.llm_api.create_llm_client')
     def test_query_gemini(self, mock_create_client):
-        mock_create_client.return_value = self.mock_gemini_client # Use the updated mock from setUp
+        mock_create_client.return_value = self.mock_gemini_client
         response = query_llm("Test prompt", provider="gemini")
         self.assertEqual(response, "Test Gemini response")
-        # Update assertions to check chat flow
-        self.mock_gemini_client.GenerativeModel.assert_called_once_with("gemini-2.0-flash-exp")
-        self.mock_gemini_model.start_chat.assert_called_once_with(
-            history=[{'role': 'user', 'parts': ["Test prompt"]}]
+        # Verify the new genai.Client API calls
+        self.mock_gemini_client.chats.create.assert_called_once_with(model="gemini-2.5-flash")
+        self.mock_gemini_chat_session.send_message.assert_called_once_with(message="Test prompt")
+
+    @unittest.skipIf(skip_llm_tests, skip_message)
+    @patch('tools.llm_api.create_llm_client')
+    @patch('tools.llm_api.encode_image_file')
+    @patch('tools.llm_api.genai')
+    def test_query_gemini_with_image(self, mock_genai, mock_encode_image, mock_create_client):
+        # Setup mocks
+        mock_create_client.return_value = self.mock_gemini_client
+        mock_encode_image.return_value = ("base64_data", "image/png")
+        
+        # Test query with image
+        response = query_llm("Describe this image", provider="gemini", image_path="test_image.png")
+        self.assertEqual(response, "Test Gemini response")
+        
+        # Verify file upload was called
+        self.mock_gemini_client.files.upload.assert_called_once_with(
+            file="test_image.png",
+            config=mock_genai.types.UploadFileConfig(mime_type="image/png")
         )
-        self.mock_gemini_chat_session.send_message.assert_called_once_with("Test prompt")
+        
+        # Verify chat session was created with history
+        self.mock_gemini_client.chats.create.assert_called_once()
+        create_call_args = self.mock_gemini_client.chats.create.call_args
+        self.assertEqual(create_call_args[1]["model"], "gemini-2.5-flash")
+        self.assertIn("history", create_call_args[1])
+        
+        # Verify send_message was called
+        self.mock_gemini_chat_session.send_message.assert_called_once_with(message="Describe this image")
 
     @unittest.skipIf(skip_llm_tests, skip_message)
     @patch('tools.llm_api.create_llm_client')
