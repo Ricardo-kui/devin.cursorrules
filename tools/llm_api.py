@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import google.generativeai as genai
+from google import genai
 from openai import OpenAI, AzureOpenAI
 from anthropic import Anthropic
 import argparse
@@ -9,8 +9,12 @@ from dotenv import load_dotenv
 from pathlib import Path
 import sys
 import base64
-from typing import Optional, Union, List
+from typing import Any, Literal, Optional, cast
 import mimetypes
+
+
+Provider = Literal["openai", "azure", "deepseek", "siliconflow", "anthropic", "gemini", "local"]
+
 
 def load_environment():
     """Load environment variables from .env files in order of precedence"""
@@ -65,7 +69,7 @@ def encode_image_file(image_path: str) -> tuple[str, str]:
         
     return encoded_string, mime_type
 
-def create_llm_client(provider="openai"):
+def create_llm_client(provider: Provider = "openai"):
     if provider == "openai":
         api_key = os.getenv('OPENAI_API_KEY')
         base_url = os.getenv('OPENAI_BASE_URL', "https://api.openai.com/v1")
@@ -111,8 +115,7 @@ def create_llm_client(provider="openai"):
         api_key = os.getenv('GOOGLE_API_KEY')
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not found in environment variables")
-        genai.configure(api_key=api_key)
-        return genai
+        return genai.Client(api_key=api_key)
     elif provider == "local":
         return OpenAI(
             base_url="http://192.168.180.137:8006/v1",
@@ -121,7 +124,7 @@ def create_llm_client(provider="openai"):
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
-def query_llm(prompt: str, client=None, model=None, provider="openai", image_path: Optional[str] = None) -> Optional[str]:
+def query_llm(prompt: str, client: Optional[Any] = None, model: Optional[str] = None, provider: Provider ="openai", image_path: Optional[str] = None) -> Optional[str]:
     """
     Query an LLM with a prompt and optional image attachment.
     
@@ -152,7 +155,7 @@ def query_llm(prompt: str, client=None, model=None, provider="openai", image_pat
             elif provider == "anthropic":
                 model = "claude-3-7-sonnet-20250219"
             elif provider == "gemini":
-                model = "gemini-2.0-flash-exp"
+                model = "gemini-2.5-flash"
             elif provider == "local":
                 model = "Qwen/Qwen2.5-32B-Instruct-AWQ"
         
@@ -218,23 +221,27 @@ def query_llm(prompt: str, client=None, model=None, provider="openai", image_pat
             return response.content[0].text
             
         elif provider == "gemini":
-            model = client.GenerativeModel(model)
+            gemini_client = cast(genai.Client, client)
+
             if image_path:
-                file = genai.upload_file(image_path, mime_type="image/png")
-                chat_session = model.start_chat(
-                    history=[{
-                        "role": "user",
-                        "parts": [file, prompt]
-                    }]
+                file = gemini_client.files.upload(
+                    file=image_path,
+                    config=genai.types.UploadFileConfig(mime_type="image/png")
+                )
+                chat_session = gemini_client.chats.create(
+                    model=model,
+                    history=[
+                        genai.types.Content(
+                            role="user",
+                            parts=[
+                                genai.types.Part.from_uri(file_uri=str(file.uri), mime_type=file.mime_type),
+                            ]
+                        )
+                    ]
                 )
             else:
-                chat_session = model.start_chat(
-                    history=[{
-                        "role": "user",
-                        "parts": [prompt]
-                    }]
-                )
-            response = chat_session.send_message(prompt)
+                chat_session = gemini_client.chats.create(model=model)
+            response = chat_session.send_message(message=prompt)
             return response.text
             
     except Exception as e:
@@ -259,7 +266,7 @@ def main():
         elif args.provider == 'anthropic':
             args.model = "claude-3-7-sonnet-20250219"
         elif args.provider == 'gemini':
-            args.model = "gemini-2.0-flash-exp"
+            args.model = "gemini-2.5-flash"
         elif args.provider == 'azure':
             args.model = os.getenv('AZURE_OPENAI_MODEL_DEPLOYMENT', 'gpt-4o-ms')  # Get from env with fallback
 

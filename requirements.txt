@@ -16,7 +16,7 @@ pytest>=8.0.0
 pytest-asyncio>=0.23.5
 
 # Google Generative AI
-google-generativeai
+google-genai
 
 # gRPC, for Google Generative AI preventing WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
 grpcio==1.70.0
