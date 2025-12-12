@@ -310,6 +310,18 @@ curl "https://api.fda.gov/device/event.json?search=device.manufacturer_d_name:Me
 - 有密钥：每分钟240次请求，每天120,000次
 - 免费申请，提高配额
 
+**申请API密钥步骤：**
+1. 访问 https://open.fda.gov/apis/authentication/
+2. 填写电子邮件地址并提交申请
+3. 查收邮件获取API密钥（40字符字符串）
+4. 在请求中使用：`?api_key=YOUR_KEY_HERE`
+
+**使用示例：**
+```bash
+# 带API密钥的请求
+curl "https://api.fda.gov/drug/event.json?api_key=YOUR_KEY_HERE&limit=10"
+```
+
 **技术栈**
 - 支持任何能发送HTTP请求的编程语言
 - 常用：Python、JavaScript、R、Java等
