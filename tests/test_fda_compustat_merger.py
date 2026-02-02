@@ -31,7 +31,7 @@ class TestFDACompustatMerger(unittest.TestCase):
         test_cases = [
             ("Pfizer Inc.", "pfizer"),
             ("Johnson & Johnson", "johnson & johnson"),
-            ("Merck & Co., Inc.", "merck & co.,"),
+            ("Merck & Co., Inc.", "merck"),
             ("AbbVie Inc", "abbvie"),
             ("Bristol-Myers Squibb Corporation", "bristol-myers squibb"),
             ("Novartis Pharmaceuticals", "novartis"),

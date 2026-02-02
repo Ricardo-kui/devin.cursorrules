@@ -161,8 +161,7 @@ class FDACompustatMerger:
             'sharp & dohme': '',  # Merck Sharp & Dohme -> Merck
             'pharmaceuticals corporation': '',
             'squibb company': 'squibb',  # Bristol-Myers Squibb Company -> bristol-myers squibb
-            '& co.,': '',  # Merck & Co., Inc. -> Merck Inc.
-            '& co.': '',
+            '& co.': '',  # Merck & Co. -> Merck
         }
         
         for old, new in replacements.items():
