@@ -128,6 +128,7 @@ python -m playwright install chromium
 - Search engine integration (DuckDuckGo)
 - LLM-powered text analysis
 - Process planning and self-reflection capabilities
+- **FDA-Compustat Data Merger**: Merge FDA drug approval data with Compustat financial data ([documentation](docs/FDA_COMPUSTAT_MERGER.md))
 
 ## Testing
 
